@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "wynnrolls",
+  "version": "${version}",
+  "name": "WynnRolls",
+  "description": "Shows roll percentages for Wynncraft item identifications in item tooltips.",
+  "authors": [
+    "Streasy"
+  ],
+  "contact": {},
+  "license": "MIT",
+  "icon": "assets/wynnrolls/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "dev.wynnrolls.WynnRollsMod"
+    ]
+  },
+  "mixins": [
+    "wynnrolls.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.15.0",
+    "minecraft": "~1.21.4",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
