@@ -46,6 +46,21 @@ public class TooltipRenderer {
     }
 
     /**
+     * " [~54.3% ?]" — Wynncraft-Kreis-Fallback (DB-Wert fehlerhaft oder kein DB-Match).
+     * Tilde zeigt Näherungswert, Fragezeichen signalisiert Fehler.
+     */
+    public static Text formatRollFallback(double rollPercent) {
+        if (rollPercent < 0) return Text.empty();
+        int color = interpolateColor(rollPercent);
+        return Text.literal(" [~")
+            .setStyle(Style.EMPTY.withColor(GRAY))
+            .append(Text.literal(String.format("%.1f%%", rollPercent))
+                .setStyle(Style.EMPTY.withColor(color)))
+            .append(Text.literal(" ?]")
+                .setStyle(Style.EMPTY.withColor(0xFF4444)));
+    }
+
+    /**
      * "Overall: 81.5%" — fett, Farbe interpoliert. Für Tooltip-Kopf.
      */
     public static Text formatOverall(double overallPercent) {

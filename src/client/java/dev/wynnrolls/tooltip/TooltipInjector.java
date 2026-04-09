@@ -61,12 +61,36 @@ public class TooltipInjector {
 
             // Roll-Berechnung
             List<Double> rolls = new ArrayList<>();
+            List<Boolean> fallbacks = new ArrayList<>();
+            List<Double> dbRolls = new ArrayList<>();   // Original-DB-Wert für Logging
             Map<String, Double> rollsByApiKey = new HashMap<>();
 
             for (StatEntry stat : result.stats()) {
                 IdentificationData idData = StatNameMapper.resolve(stat, itemData);
                 double roll = RollCalculator.calculate(stat, idData);
+                boolean isFallback = false;
+
+                int circleStep = extractCircleStep(stat.rawLine);
+
+                if (roll < 0) {
+                    // Kein DB-Match — Wynncraft-Kreis als Fallback
+                    if (circleStep >= 0) {
+                        roll = circleStep * 100.0 / 35.0;
+                        isFallback = true;
+                    }
+                } else if (circleStep >= 0) {
+                    // DB-Match vorhanden — gegen Wynncraft-Kreis prüfen
+                    int ourStep = (int)(roll * 35 / 100);
+                    if (Math.abs(ourStep - circleStep) > 2) {
+                        // Abweichung > 2 Stufen (>5.7%): unsere Berechnung fehlerhaft → Kreis-Fallback
+                        roll = circleStep * 100.0 / 35.0;
+                        isFallback = true;
+                    }
+                }
+
+                dbRolls.add(RollCalculator.calculate(stat, idData));  // unverändert für Log
                 rolls.add(roll);
+                fallbacks.add(isFallback);
 
                 // API-Key rückverfolgen für Skalen-Berechnung
                 if (roll >= 0 && idData != null) {
@@ -94,13 +118,37 @@ public class TooltipInjector {
                 for (int i = 0; i < stats.size(); i++) {
                     StatEntry stat = stats.get(i);
                     IdentificationData idData = StatNameMapper.resolve(stat, itemData);
-                    double roll = rolls.get(i);
-                    if (roll >= 0) {
+                    double roll = dbRolls.get(i);    // Original-DB-Wert (vor Kreis-Override)
+                    boolean isFallback = fallbacks.get(i);
+                    if (roll >= 0 && idData != null) {
+                        // API-Key rückverfolgen für Diagnose
+                        String dbKey = resolveApiKey(stat, itemData, idData);
+                        double lo = Math.min(idData.min, idData.max);
+                        double hi = Math.max(idData.min, idData.max);
+                        boolean inRange = stat.value >= lo && stat.value <= hi;
+                        // Verifikation: DB-Step vs. Wynncraft-Kreis-Step
+                        int wynnStep = extractCircleStep(stat.rawLine);
+                        int ourStep = (int)(roll * 35 / 100);
+                        String verify = wynnStep < 0 ? "" :
+                            (Math.abs(ourStep - wynnStep) <= 2 ? " ✓circle=" + wynnStep
+                                : " ⚠circle=" + wynnStep + " ourStep=" + ourStep);
+                        String fallbackNote = isFallback ? " [KREIS-OVERRIDE]" : "";
                         DebugLogger.log("  " + stat.displayName + ": " + stat.value
                             + " in [" + idData.min + ".." + idData.max + "] = "
-                            + String.format("%.1f%%", roll));
+                            + String.format("%.1f%%", roll)
+                            + " (key=" + dbKey + verify + fallbackNote
+                            + (inRange ? "" : ", AUSSERHALB RANGE!") + ")");
                     } else {
-                        DebugLogger.log("  " + stat.displayName + ": KEIN MATCH in DB");
+                        int circleStep = extractCircleStep(stat.rawLine);
+                        if (circleStep >= 0) {
+                            DebugLogger.log("  " + stat.displayName + ": KEIN DB-MATCH"
+                                + " → Kreis-Fallback " + circleStep + "/35 = "
+                                + String.format("%.1f%%", circleStep * 100.0 / 35.0)
+                                + " (parsed: " + stat.value + " " + stat.unit + ")");
+                        } else {
+                            DebugLogger.log("  " + stat.displayName + ": KEIN MATCH, kein Kreis"
+                                + " (parsed: " + stat.value + " " + stat.unit + ")");
+                        }
                     }
                 }
                 if (overall >= 0) {
@@ -117,7 +165,7 @@ public class TooltipInjector {
             });
 
             // Visuell injizieren — JEDEN Frame (Liste wird immer neu aufgebaut)
-            injectRolls(lines, result.stats(), rolls, overall, scales, rollsByApiKey, isDefective, isPerfect);
+            injectRolls(lines, result.stats(), rolls, fallbacks, overall, scales, rollsByApiKey, isDefective, isPerfect);
         });
 
         DebugLogger.log("TooltipInjector registered.");
@@ -130,6 +178,7 @@ public class TooltipInjector {
     private static void injectRolls(List<Text> lines,
                                      List<StatEntry> stats,
                                      List<Double> rolls,
+                                     List<Boolean> fallbacks,
                                      double overall,
                                      List<ItemWeightDatabase.ScaleEntry> scales,
                                      Map<String, Double> rollsByApiKey,
@@ -147,7 +196,10 @@ public class TooltipInjector {
                 if (stripPUA(lines.get(i).getString()).equals(strippedTarget)) {
                     if (roll >= 0) {
                         MutableText newLine = lines.get(i).copy();
-                        newLine.append(TooltipRenderer.formatRoll(roll));
+                        boolean isFallback = fallbacks.get(s);
+                        newLine.append(isFallback
+                            ? TooltipRenderer.formatRollFallback(roll)
+                            : TooltipRenderer.formatRoll(roll));
                         lines.set(i, newLine);
                     }
                     if (i > lastStatLineIdx) lastStatLineIdx = i;
@@ -258,4 +310,27 @@ public class TooltipInjector {
     public static void resetLastLogged() {
         lastLoggedItem = null;
     }
+
+    /**
+     * Extrahiert den Wynncraft-Kreis-Füllstand aus einer rohen Tooltip-Zeile.
+     * Format: [icon] [base] U+E023 U+CFFF7 [fill:U+E000..U+E023]
+     * U+CFFF7 als UTF-16 Surrogatpaar: 0xDAFF + 0xDFF7
+     * Gibt 0–35 zurück (35=100%) oder -1 wenn kein Kreis vorhanden.
+     */
+    static int extractCircleStep(String s) {
+        for (int i = 0; i + 1 < s.length(); i++) {
+            if (s.charAt(i) == 0xDAFF && s.charAt(i + 1) == 0xDFF7) {
+                // U+CFFF7 gefunden — nächstes Zeichen ist der Fill-Char
+                int next = i + 2;
+                if (next < s.length()) {
+                    char fill = s.charAt(next);
+                    if (fill >= 0xE000 && fill <= 0xE023) {
+                        return fill - 0xE000;
+                    }
+                }
+            }
+        }
+        return -1;
+    }
+
 }

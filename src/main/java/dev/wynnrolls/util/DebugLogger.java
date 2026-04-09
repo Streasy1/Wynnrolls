@@ -6,7 +6,7 @@ import org.slf4j.LoggerFactory;
 public class DebugLogger {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("WynnRolls");
-    private static boolean debugEnabled = true;
+    private static boolean debugEnabled = false;
 
     public static void log(String message) {
         if (debugEnabled) {

@@ -17,10 +17,12 @@ import java.util.Map;
  */
 public class StatNameMapper {
 
-    // Alle möglichen Spell-Cost-Slots (raw zuerst, da Spell Costs meist flat sind)
-    private static final String[] SPELL_COST_SLOTS = {
-        "raw1stSpellCost", "raw2ndSpellCost", "raw3rdSpellCost", "raw4thSpellCost",
-        "1stSpellCost",    "2ndSpellCost",    "3rdSpellCost",    "4thSpellCost"
+    // Spell-Cost-Slots: flache (raw) und prozentuale Varianten getrennt
+    private static final String[] SPELL_COST_SLOTS_RAW = {
+        "raw1stSpellCost", "raw2ndSpellCost", "raw3rdSpellCost", "raw4thSpellCost"
+    };
+    private static final String[] SPELL_COST_SLOTS_PCT = {
+        "1stSpellCost", "2ndSpellCost", "3rdSpellCost", "4thSpellCost"
     };
 
     private static final Map<String, String> OVERRIDES = new HashMap<>();
@@ -65,32 +67,33 @@ public class StatNameMapper {
         OVERRIDES.put("air defence", "airDefence");
         OVERRIDES.put("thunder defence", "thunderDefence");
         OVERRIDES.put("earth defence", "earthDefence");
-        // Mage spells
-        OVERRIDES.put("heal cost",       "raw1stSpellCost");
-        OVERRIDES.put("teleport cost",   "raw2ndSpellCost");
-        OVERRIDES.put("meteor cost",     "raw3rdSpellCost");
-        OVERRIDES.put("ice snake cost",  "raw4thSpellCost");
-        // Warrior spells
-        OVERRIDES.put("bash cost",       "raw1stSpellCost");
-        OVERRIDES.put("charge cost",     "raw2ndSpellCost");
-        OVERRIDES.put("war cry cost",    "raw3rdSpellCost");
-        OVERRIDES.put("uppercut cost",   "raw4thSpellCost");
-        OVERRIDES.put("haul cost",       "raw4thSpellCost");
-        // Archer spells
+        // Spell Costs — alle zeigen auf "raw"-Variante; % vs flat wird in resolve() über Unit gesteuert.
+        // Mage / Dark Wizard spells
+        OVERRIDES.put("heal cost",         "raw1stSpellCost");
+        OVERRIDES.put("teleport cost",     "raw2ndSpellCost");
+        OVERRIDES.put("meteor cost",       "raw3rdSpellCost");
+        OVERRIDES.put("ice snake cost",    "raw4thSpellCost");
+        // Warrior / Knight spells
+        OVERRIDES.put("bash cost",         "raw1stSpellCost");
+        OVERRIDES.put("charge cost",       "raw2ndSpellCost");
+        OVERRIDES.put("uppercut cost",     "raw3rdSpellCost");
+        OVERRIDES.put("war scream cost",   "raw4thSpellCost");
+        // Archer / Hunter spells
         OVERRIDES.put("arrow storm cost",  "raw1stSpellCost");
         OVERRIDES.put("escape cost",       "raw2ndSpellCost");
-        OVERRIDES.put("arrow shield cost", "raw3rdSpellCost");
-        OVERRIDES.put("arrow rain cost",   "raw4thSpellCost");
-        // Assassin spells
-        OVERRIDES.put("spin attack cost",    "raw1stSpellCost");
-        OVERRIDES.put("vanish cost",         "raw2ndSpellCost");
-        OVERRIDES.put("smoke bomb cost",     "raw3rdSpellCost");
-        OVERRIDES.put("mortal decision cost","raw4thSpellCost");
-        // Shaman spells
-        OVERRIDES.put("totem cost",      "raw1stSpellCost");
-        OVERRIDES.put("haul cost",       "raw2ndSpellCost");
-        OVERRIDES.put("war scream cost", "raw3rdSpellCost");
-        OVERRIDES.put("uproot cost",     "raw4thSpellCost");
+        OVERRIDES.put("arrow bomb cost",   "raw3rdSpellCost");
+        OVERRIDES.put("arrow shield cost", "raw4thSpellCost");
+        // Assassin / Ninja spells
+        OVERRIDES.put("spin attack cost",  "raw1stSpellCost");
+        OVERRIDES.put("multihit cost",     "raw2ndSpellCost");
+        OVERRIDES.put("vanish cost",       "raw3rdSpellCost");
+        OVERRIDES.put("dash cost",         "raw3rdSpellCost");  // Ninja-Variante von Vanish
+        OVERRIDES.put("smoke bomb cost",   "raw4thSpellCost");
+        // Shaman / Skyseer spells
+        OVERRIDES.put("totem cost",        "raw1stSpellCost");
+        OVERRIDES.put("haul cost",         "raw2ndSpellCost");
+        OVERRIDES.put("aura cost",         "raw3rdSpellCost");
+        OVERRIDES.put("uproot cost",       "raw4thSpellCost");
     }
 
     public static IdentificationData resolve(StatEntry stat, ItemData itemData) {
@@ -105,9 +108,22 @@ public class StatNameMapper {
         // 1. Hardcoded Override (inkl. Spell-Cost-Namen aller Klassen)
         if (OVERRIDES.containsKey(lower)) {
             String key = OVERRIDES.get(lower);
+            if (isPercent && key.startsWith("raw")) {
+                // PERCENT-Einheit → non-raw Variante zuerst (z.B. 1stSpellCost statt raw1stSpellCost)
+                String nonRaw = key.substring(3, 4).toLowerCase() + key.substring(4);
+                IdentificationData found = tryKey(nonRaw, itemData);
+                if (found != null) return found;
+            } else if (!isPercent && !key.startsWith("raw")) {
+                // FLAT-Einheit → "Raw"-Varianten zuerst versuchen (z.B. healthRegenRaw / rawHealthRegen)
+                // verhindert dass "Health Regen" (flat) fälschlich auf healthRegen (%) gemappt wird
+                IdentificationData found = tryKey(key + "Raw", itemData);
+                if (found != null) return found;
+                found = tryKey("raw" + capitalize(key), itemData);
+                if (found != null) return found;
+            }
             IdentificationData found = tryKey(key, itemData);
             if (found != null) return found;
-            // Fallback: ohne "raw"-Prefix versuchen
+            // Gegenteil: ohne "raw"-Prefix / mit Suffix versuchen
             if (key.startsWith("raw")) {
                 found = tryKey(key.substring(3, 4).toLowerCase() + key.substring(4), itemData);
                 if (found != null) return found;
@@ -120,7 +136,7 @@ public class StatNameMapper {
         // 2. Spell-Cost-Fallback: unbekannte "X Cost" Stats per Wert-Matching auflösen
         //    Findet den richtigen Slot auch wenn der Spell-Name unbekannt ist.
         if (lower.endsWith(" cost")) {
-            IdentificationData found = resolveSpellCostByValue(stat.value, itemData);
+            IdentificationData found = resolveSpellCostByValue(stat.value, isPercent, itemData);
             if (found != null) return found;
         }
 
@@ -148,16 +164,34 @@ public class StatNameMapper {
     }
 
     /**
-     * Findet den Spell-Cost-Slot dessen raw-Wert mit dem tatsächlichen Tooltip-Wert übereinstimmt.
-     * Fallback: gibt den ersten vorhandenen Spell-Cost-Slot zurück.
+     * Findet den Spell-Cost-Slot in dessen [min..max]-Range der Tooltip-Wert fällt.
+     * isPercent=true → prüft erst PCT-Slots, dann RAW als Fallback.
+     * isPercent=false → prüft erst RAW-Slots, dann PCT als Fallback.
+     * Range-Check: actualValue muss innerhalb [min..max] liegen.
+     * Fallback: gibt den ersten vorhandenen Slot des bevorzugten Typs zurück.
      */
-    private static IdentificationData resolveSpellCostByValue(double actualValue, ItemData itemData) {
+    private static IdentificationData resolveSpellCostByValue(double actualValue, boolean isPercent, ItemData itemData) {
+        String[] preferred = isPercent ? SPELL_COST_SLOTS_PCT : SPELL_COST_SLOTS_RAW;
+        String[] fallback  = isPercent ? SPELL_COST_SLOTS_RAW : SPELL_COST_SLOTS_PCT;
+
         IdentificationData firstFound = null;
-        for (String slot : SPELL_COST_SLOTS) {
+        // Erst bevorzugten Typ prüfen
+        for (String slot : preferred) {
             IdentificationData id = itemData.identifications.get(slot);
             if (id == null) continue;
             if (firstFound == null) firstFound = id;
-            if (id.raw == (int) actualValue) return id;
+            double lo = Math.min(id.min, id.max);
+            double hi = Math.max(id.min, id.max);
+            if (actualValue >= lo && actualValue <= hi) return id;
+        }
+        // Dann Fallback-Typ
+        for (String slot : fallback) {
+            IdentificationData id = itemData.identifications.get(slot);
+            if (id == null) continue;
+            if (firstFound == null) firstFound = id;
+            double lo = Math.min(id.min, id.max);
+            double hi = Math.max(id.min, id.max);
+            if (actualValue >= lo && actualValue <= hi) return id;
         }
         return firstFound;
     }

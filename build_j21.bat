@@ -4,7 +4,7 @@ set PATH=%JAVA_HOME%\bin;%PATH%
 cd /d "d:\Games\Minecraft\Self Made mods\wynnrolls"
 call gradlew.bat build
 if %ERRORLEVEL% equ 0 (
-    copy /Y "build\libs\wynnrolls-1.0.0.jar" "C:\Users\YTGBS\curseforge\minecraft\Instances\Wynn Fruma\mods\wynnrolls-1.0.0.jar"
+    copy /Y "build\libs\wynnrolls_1.1.5_MC-1.21.11.jar" "C:\Users\YTGBS\curseforge\minecraft\Instances\Wynn Fruma\mods\wynnrolls_1.1.5_MC-1.21.11.jar"
     echo Mod kopiert.
 ) else (
     echo BUILD FEHLGESCHLAGEN.

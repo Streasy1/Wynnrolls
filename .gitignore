@@ -11,6 +11,11 @@ gradle/wrapper/gradle-wrapper.jar
 *.iml
 .vscode/
 
+# Claude Code
+.claude/
+CLAUDE.md
+AGENT.md
+
 # OS
 Thumbs.db
 .DS_Store

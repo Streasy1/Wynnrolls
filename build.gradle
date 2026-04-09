@@ -63,9 +63,14 @@ java {
 }
 
 jar {
+    archiveFileName = "${project.archives_base_name}_${project.mod_version}_MC-${project.minecraft_version}.jar"
     from("LICENSE") {
         rename { "${it}_${project.base.archivesName.get()}" }
     }
+}
+
+tasks.named('remapJar') {
+    archiveFileName = "${project.archives_base_name}_${project.mod_version}_MC-${project.minecraft_version}.jar"
 }
 
 // configure the maven publication

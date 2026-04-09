@@ -35,35 +35,12 @@ public class RollCalculator {
         // Sicherheit: wenn Bereich 0 ist, kein sinnvoller Roll berechenbar
         if (max == min) return -1;
 
-        // Bei negativen Stats: min ist negativer als max (z.B. min=-200, max=-108)
-        // Der Roll-% gibt an wie nahe wir am "besseren" Ende sind.
-        // Für negative Stats: näher an max (weniger negativ) = besser = höherer Roll%
-        // Das ist dieselbe Formel — bei negativen Stats ist "höher" bereits besser
-        // weil max > min (z.B. -108 > -200).
+        // gear_expanded Konvention: min = schlechtester Roll (0%), max = bester Roll (100%)
+        // Auch bei Spell Costs wo min > max numerisch (min=-1, max=-4 → -1 ist worst, -4 ist best)
         double roll = (actual - min) / (max - min) * 100.0;
 
         // Clamp auf 0–100
         return Math.max(0.0, Math.min(100.0, roll));
     }
 
-    /**
-     * Farb-Kategorie für einen Roll-Prozentsatz.
-     */
-    public static RollTier getTier(double rollPercent) {
-        if (rollPercent < 0) return RollTier.UNKNOWN;
-        if (rollPercent < 30) return RollTier.TERRIBLE;
-        if (rollPercent < 60) return RollTier.BAD;
-        if (rollPercent < 80) return RollTier.MEDIUM;
-        if (rollPercent < 95) return RollTier.GOOD;
-        return RollTier.PERFECT;
-    }
-
-    public enum RollTier {
-        UNKNOWN,
-        TERRIBLE,  // 0–30%
-        BAD,       // 30–60%
-        MEDIUM,    // 60–80%
-        GOOD,      // 80–95%
-        PERFECT    // 95–100%
-    }
 }

@@ -21,16 +21,6 @@ import java.util.regex.Pattern;
  */
 public class TooltipParser {
 
-    // Removes Minecraft §-color and formatting codes
-    private static final Pattern COLOR_CODE_PATTERN = Pattern.compile("§[0-9a-fk-orA-FK-OR]");
-
-    // Removes BMP Private Use Area chars (U+E000–U+F8FF, used by Wynncraft custom font)
-    private static final Pattern BMP_PUA_PATTERN = Pattern.compile("[\\uE000-\\uF8FF]");
-
-    // Removes Unicode surrogate halves (D800–DFFF) which encode Supplementary PUA chars
-    // (Wynncraft uses plane-15/16 PUA for roll bars, rarity icons, etc.)
-    private static final Pattern SURROGATE_PATTERN = Pattern.compile("[\\uD800-\\uDFFF]");
-
     /**
      * Fruma stat line pattern (applied AFTER stripping PUA + surrogates):
      * Group 1: stat name (letters + spaces, must start with letter)
@@ -199,31 +189,6 @@ public class TooltipParser {
         boolean isNegative = NEGATIVE_STATS.contains(name.toLowerCase()) || value < 0;
 
         return new StatEntry(name, value, unit, isNegative, rawLine, lineIndex);
-    }
-
-    public static String stripColors(String text) {
-        return COLOR_CODE_PATTERN.matcher(text).replaceAll("");
-    }
-
-    /**
-     * Logs all raw tooltip lines with unicode codepoints visible.
-     * Call once per unique item (before parse) to inspect the actual tooltip format.
-     */
-    public static void logRawLines(List<Text> tooltip) {
-        DebugLogger.log("=== RAW TOOLTIP (" + tooltip.size() + " lines) ===");
-        for (int i = 0; i < tooltip.size(); i++) {
-            String raw = tooltip.get(i).getString();
-            StringBuilder sb = new StringBuilder();
-            for (char c : raw.toCharArray()) {
-                if (c < 32 || (c > 126 && c < 160) || (c >= 0xE000 && c <= 0xF8FF) || Character.isSurrogate(c)) {
-                    sb.append(String.format("[U+%04X]", (int) c));
-                } else {
-                    sb.append(c);
-                }
-            }
-            DebugLogger.log("  L" + i + ": [" + sb + "]");
-        }
-        DebugLogger.log("=== END RAW ===");
     }
 
     /**
